@@ -112,12 +112,11 @@ def hourly_rates(day: date):
     labels = [f"{int(h):02d}:{int((h % 1) * 60):02d}" for h in hours]
 
     hourly_ev = rate.reshape(24, 6).sum(axis=1)
-    anom_per_hour = anom.reshape(24, 6)
-    hourly_anom = np.array([
-        "long_still" if np.any(row == "long_still")
-        else ("sudden_burst" if np.any(row == "sudden_burst") else "normal")
-        for row in anom_per_hour
-    ], dtype=object)
+    h_lo = float(np.percentile(hourly_ev, 10))
+    h_hi = float(np.percentile(hourly_ev, 90))
+    hourly_anom = np.full(24, "normal", dtype=object)
+    hourly_anom[hourly_ev < h_lo] = "long_still"
+    hourly_anom[hourly_ev > h_hi] = "sudden_burst"
 
     return hours, rate, anom, labels, hourly_ev, hourly_anom
 
@@ -164,7 +163,7 @@ def month_data(year: int, month: int) -> list[dict]:
             ar = day_rng.uniform(0.01, 0.11)
 
         score = int(np.clip(score_raw, 0, 100))
-        ok = ar < 0.12
+        ok = score >= 70
         base_events = day_rng.uniform(90000, 180000)
         event_factor = 0.5 + 0.5 * (score / 100)
         total_events = int(base_events * event_factor * (1 + day_rng.normal(0, 0.08)))
@@ -256,11 +255,17 @@ def fig_month_cal(rows: list[dict], year: int, month: int) -> go.Figure:
 def fig_month_trend(rows: list[dict]) -> go.Figure:
     ds = [r["date"] for r in rows]
     sc = [r["score"] for r in rows]
-    mc = [C_OK if r["ok"] else C_ALERT for r in rows]
+    mc = [C_OK if s >= 70 else (C_WARN if s >= 40 else C_ALERT) for s in sc]
     fig = go.Figure()
     fig.add_hrect(y0=70, y1=100, fillcolor=C_OK, opacity=.04, line_width=0)
     fig.add_hrect(y0=40, y1=70, fillcolor=C_WARN, opacity=.04, line_width=0)
     fig.add_hrect(y0=0, y1=40, fillcolor=C_ALERT, opacity=.04, line_width=0)
+    fig.add_hline(y=70, line=dict(color=C_OK, width=1, dash="dash"),
+                  annotation_text="正常 ≥70", annotation_position="top left",
+                  annotation_font=dict(color=C_OK, size=10))
+    fig.add_hline(y=40, line=dict(color=C_ALERT, width=1, dash="dash"),
+                  annotation_text="警告 <40", annotation_position="bottom left",
+                  annotation_font=dict(color=C_ALERT, size=10))
     fig.add_trace(go.Scatter(
         x=ds, y=sc, mode="lines+markers",
         line=dict(color=C_ON, width=2),
@@ -397,7 +402,7 @@ PAGES = {
 
 with st.sidebar:
     st.markdown("## 🐟 EVS 鱼缸监控")
-    st.caption(f"传感器 {SENSOR_W}×{SENSOR_H} DVS · {date.today():%Y-%m-%d}")
+    st.caption(f"{date.today():%Y-%m-%d}")
     st.markdown("---")
     page = st.radio("功能导航", list(PAGES.keys()), label_visibility="collapsed")
 
