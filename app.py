@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -23,7 +23,6 @@ C_OFF = "#ff0066"
 C_OK = "#4ecdc4"
 C_WARN = "#ffe66d"
 C_ALERT = "#ff6b6b"
-FISH_PALETTE = ["#00e5ff", "#ff0066", "#ffe66d", "#4ecdc4", "#ff9f43", "#a29bfe"]
 
 DK = dict(
     template="plotly_dark",
@@ -34,20 +33,19 @@ DK = dict(
 
 CSS = """<style>
 [data-testid="stMetric"]{background:linear-gradient(135deg,#0d1b2a,#1b2838);
-  border:1px solid rgba(0,229,255,.12);border-radius:12px;padding:14px 18px;
+  border:1px solid rgba(0,229,255,.12);border-radius:10px;padding:10px 14px;
   box-shadow:0 0 20px rgba(0,229,255,.04)}
-[data-testid="stMetricValue"]{color:#00e5ff}
-[data-testid="stMetricLabel"]{color:#8899aa}
+[data-testid="stMetricValue"]{color:#00e5ff;font-size:1.3rem!important}
+[data-testid="stMetricLabel"]{color:#8899aa;font-size:.82rem!important}
 .stTabs [data-baseweb="tab-list"] button[aria-selected="true"]{
   color:#00e5ff!important;border-bottom-color:#00e5ff!important}
 section[data-testid="stSidebar"]{background:linear-gradient(180deg,#080c14,#0f1923)}
-.hero{text-align:center;padding:18px 24px;
+.hero{text-align:center;padding:10px 18px;
   background:linear-gradient(135deg,#0d1b2a,#162a40);
-  border-radius:14px;border:1px solid rgba(0,229,255,.1);margin-bottom:16px}
-.hero h3{color:#00e5ff;margin:0}.hero p{color:#778899;margin:4px 0 0;font-size:.92em}
-.adv-card{background:linear-gradient(135deg,#0d1b2a,#162a40);
-  border:1px solid rgba(0,229,255,.08);border-radius:12px;padding:18px;margin:8px 0}
-.adv-card h4{color:#00e5ff;margin:0 0 6px}.adv-card p{color:#aabbcc;margin:0;font-size:.88em}
+  border-radius:12px;border:1px solid rgba(0,229,255,.1);margin-bottom:10px}
+.hero h3{color:#00e5ff;margin:0;font-size:1.15em}
+.hero p{color:#778899;margin:2px 0 0;font-size:.82em}
+.block-container{padding-top:1.5rem!important;padding-bottom:1rem!important}
 </style>"""
 
 
@@ -59,20 +57,20 @@ def _hero(title: str, subtitle: str) -> None:
 
 
 def _render_table(headers: list[str], rows: list[list[str]]) -> None:
-    """Pure-HTML table — avoids st.dataframe which requires pyarrow."""
-    hdr = "".join(f"<th style='padding:8px 14px;text-align:left;border-bottom:"
-                  f"2px solid rgba(0,229,255,.25);color:#00e5ff'>{h}</th>"
+    hdr = "".join(f"<th style='padding:5px 10px;text-align:left;border-bottom:"
+                  f"2px solid rgba(0,229,255,.25);color:#00e5ff;font-size:.82em'>{h}</th>"
                   for h in headers)
     body = ""
     for r in rows:
         cells = "".join(
-            f"<td style='padding:6px 14px;border-bottom:1px solid #1b2838'>{c}</td>"
+            f"<td style='padding:4px 10px;border-bottom:1px solid #1b2838;"
+            f"font-size:.82em'>{c}</td>"
             for c in r
         )
         body += f"<tr>{cells}</tr>"
     st.markdown(
         f"<div style='overflow-x:auto'><table style='width:100%;border-collapse:"
-        f"collapse;font-size:.9em'><thead><tr>{hdr}</tr></thead>"
+        f"collapse'><thead><tr>{hdr}</tr></thead>"
         f"<tbody>{body}</tbody></table></div>",
         unsafe_allow_html=True,
     )
@@ -87,54 +85,6 @@ def _rng(seed: int) -> np.random.Generator:
 
 
 @st.cache_data(show_spinner=False)
-def fish_paths(n_fish: int = 4, n_pts: int = 300, dur: float = 10.0, seed: int = 42):
-    rng = _rng(seed)
-    t = np.linspace(0, dur, n_pts)
-    out: list[dict[str, Any]] = []
-    for i in range(n_fish):
-        fx, fy = rng.uniform(.08, .4), rng.uniform(.08, .4)
-        px, py = rng.uniform(0, 6.28), rng.uniform(0, 6.28)
-        ax, ay = rng.uniform(80, 250), rng.uniform(60, 180)
-        cx = rng.uniform(180, SENSOR_W - 180)
-        cy = rng.uniform(140, SENSOR_H - 140)
-        x = cx + ax * np.sin(2 * np.pi * fx * t + px) + rng.normal(0, 3, n_pts)
-        y = cy + ay * np.sin(2 * np.pi * fy * t + py) + rng.normal(0, 3, n_pts)
-        x, y = np.clip(x, 12, SENSOR_W - 12), np.clip(y, 12, SENSOR_H - 12)
-        dx = np.diff(x, prepend=x[0])
-        dy = np.diff(y, prepend=y[0])
-        speed = np.sqrt(dx ** 2 + dy ** 2) / (dur / n_pts)
-        out.append(dict(x=x, y=y, t=t, speed=speed, id=i))
-    return out
-
-
-@st.cache_data(show_spinner=False)
-def sim_events(n_fish: int = 4, epf: int = 2000, seed: int = 42):
-    paths = fish_paths(n_fish=n_fish, seed=seed)
-    rng = _rng(seed + 7)
-    xs, ys, ts, ps = [], [], [], []
-    for p in paths:
-        n = len(p["t"])
-        w = np.asarray(p["speed"], dtype=float) + 1e-6
-        w /= w.sum()
-        idx = rng.choice(n, size=epf, p=w)
-        xs.append(np.asarray(p["x"])[idx] + rng.normal(0, 6, epf))
-        ys.append(np.asarray(p["y"])[idx] + rng.normal(0, 5, epf))
-        ts.append(np.asarray(p["t"])[idx] + rng.uniform(-.02, .02, epf))
-        ps.append(rng.integers(0, 2, epf))
-    nn = 800
-    xs.append(rng.uniform(0, SENSOR_W, nn))
-    ys.append(rng.uniform(0, SENSOR_H, nn))
-    ts.append(rng.uniform(0, 10, nn))
-    ps.append(rng.integers(0, 2, nn))
-    ex = np.clip(np.concatenate(xs), 0, SENSOR_W)
-    ey = np.clip(np.concatenate(ys), 0, SENSOR_H)
-    et = np.concatenate(ts)
-    ep = np.concatenate(ps).astype(int)
-    order = np.argsort(et)
-    return ex[order], ey[order], et[order], ep[order]
-
-
-@st.cache_data(show_spinner=False)
 def hourly_rates(day: date):
     seed = int(day.strftime("%Y%m%d"))
     rng = _rng(seed)
@@ -144,7 +94,6 @@ def hourly_rates(day: date):
     rate = 120 * (1 + circ) + rng.normal(0, 25, n)
     rate = np.clip(rate, 10, None).astype(float)
 
-    # ~20% 的天注入异常，其余天完全正常
     inject = rng.random() < 0.20
     if inject:
         s = rng.integers(n // 4, n // 3)
@@ -161,7 +110,16 @@ def hourly_rates(day: date):
     anom[rate < lo] = "long_still"
     anom[rate > hi] = "sudden_burst"
     labels = [f"{int(h):02d}:{int((h % 1) * 60):02d}" for h in hours]
-    return hours, rate, anom, labels
+
+    hourly_ev = rate.reshape(24, 6).sum(axis=1)
+    anom_per_hour = anom.reshape(24, 6)
+    hourly_anom = np.array([
+        "long_still" if np.any(row == "long_still")
+        else ("sudden_burst" if np.any(row == "sudden_burst") else "normal")
+        for row in anom_per_hour
+    ], dtype=object)
+
+    return hours, rate, anom, labels, hourly_ev, hourly_anom
 
 
 def _score(rate: np.ndarray, anom: np.ndarray) -> int:
@@ -222,152 +180,30 @@ def month_data(year: int, month: int) -> list[dict]:
 # 可视化函数
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ---------- 事件流动态回放 ----------
-def fig_replay(ex, ey, et, ep, n_frames: int = 35, window: float = .4) -> go.Figure:
-    t0 = float(et.min()) + window
-    t1 = float(et.max())
-    fts = np.linspace(t0, t1, n_frames)
-
-    frames: list[go.Frame] = []
-    for ft in fts:
-        m = (et >= ft - window) & (et < ft)
-        c = np.where(ep[m] == 1, C_ON, C_OFF)
-        frames.append(go.Frame(
-            data=[go.Scatter(
-                x=ex[m], y=ey[m], mode="markers",
-                marker=dict(size=3, color=c, opacity=.75),
-            )],
-            name=f"{ft:.2f}",
-        ))
-
-    m0 = (et >= fts[0] - window) & (et < fts[0])
-    c0 = np.where(ep[m0] == 1, C_ON, C_OFF)
-    fig = go.Figure(
-        data=[go.Scatter(x=ex[m0], y=ey[m0], mode="markers",
-                           marker=dict(size=3, color=c0, opacity=.75))],
-        frames=frames,
-    )
-    fig.update_layout(
-        **DK, height=520,
-        title="事件流回放 — 滑动时间窗口",
-        xaxis=dict(range=[0, SENSOR_W], title="X (px)", showgrid=False),
-        yaxis=dict(range=[SENSOR_H, 0], title="Y (px)", showgrid=False, scaleanchor="x"),
-        updatemenus=[dict(
-            type="buttons", x=.08, y=-.06, direction="left",
-            buttons=[
-                dict(label="▶ 播放", method="animate",
-                     args=[None, dict(frame=dict(duration=70, redraw=True),
-                                      fromcurrent=True, transition=dict(duration=0))]),
-                dict(label="⏸", method="animate",
-                     args=[[None], dict(frame=dict(duration=0), mode="immediate")]),
-            ],
-        )],
-        sliders=[dict(
-            steps=[dict(args=[[f.name], dict(frame=dict(duration=70), mode="immediate")],
-                        label=f.name, method="animate") for f in frames],
-            x=.08, len=.84, y=-.02,
-            currentvalue=dict(prefix="t = ", suffix=" s", font=dict(color=C_ON)),
-        )],
-    )
-    return fig
-
-
-# ---------- 运动轨迹动画 ----------
-def fig_trajectory_anim(paths: list[dict], n_frames: int = 30) -> go.Figure:
-    n_pts = len(paths[0]["t"])
-    indices = np.linspace(10, n_pts - 1, n_frames, dtype=int)
-
-    trail_len = max(60, n_pts // 4)
-
-    def _build(end: int) -> list[go.Scatter]:
-        traces: list[go.Scatter] = []
-        hx, hy, hc = [], [], []
-        for p in paths:
-            c = FISH_PALETTE[p["id"] % len(FISH_PALETTE)]
-            start = max(0, end - trail_len)
-            seg_x = np.asarray(p["x"])[start:end]
-            seg_y = np.asarray(p["y"])[start:end]
-            traces.append(go.Scatter(
-                x=seg_x, y=seg_y,
-                mode="lines", line=dict(color=c, width=2), opacity=.55,
-                showlegend=False,
-            ))
-            hx.append(float(np.asarray(p["x"])[end - 1]))
-            hy.append(float(np.asarray(p["y"])[end - 1]))
-            hc.append(c)
-        traces.append(go.Scatter(
-            x=hx, y=hy, mode="markers",
-            marker=dict(size=14, color=hc, line=dict(color="white", width=1.5)),
-            showlegend=False,
-        ))
-        return traces
-
-    frames = [go.Frame(data=_build(int(ei)), name=str(ei)) for ei in indices]
-    fig = go.Figure(data=_build(int(indices[0])), frames=frames)
-    for i, p in enumerate(paths):
-        fig.data[i].name = f"鱼 #{p['id'] + 1}"
-        fig.data[i].showlegend = True
-    fig.add_shape(type="rect", x0=0, y0=0, x1=SENSOR_W, y1=SENSOR_H,
-                  line=dict(color="rgba(0,229,255,.2)", width=1, dash="dot"))
-    fig.update_layout(
-        **DK, height=520,
-        title="鱼体运动轨迹 — 基于 EVS 事件聚类重建",
-        xaxis=dict(range=[-10, SENSOR_W + 10], title="X (px)", showgrid=False),
-        yaxis=dict(range=[SENSOR_H + 10, -10], title="Y (px)", showgrid=False,
-                   scaleanchor="x"),
-        updatemenus=[dict(
-            type="buttons", x=.08, y=-.06, direction="left",
-            buttons=[
-                dict(label="▶ 播放", method="animate",
-                     args=[None, dict(frame=dict(duration=80, redraw=True),
-                                      fromcurrent=True, transition=dict(duration=0))]),
-                dict(label="⏸", method="animate",
-                     args=[[None], dict(frame=dict(duration=0), mode="immediate")]),
-            ],
-        )],
-    )
-    return fig
-
-
-# ---------- 空间活跃热力图 ----------
-def fig_heatmap(ex, ey) -> go.Figure:
-    H, _, _ = np.histogram2d(ex, ey, bins=[80, 60],
-                             range=[[0, SENSOR_W], [0, SENSOR_H]])
-    fig = go.Figure(go.Heatmap(
-        z=H.T, x=np.linspace(0, SENSOR_W, 80),
-        y=np.linspace(0, SENSOR_H, 60),
-        colorscale="Hot", showscale=True,
-        colorbar=dict(title="密度"),
-        hovertemplate="X=%{x:.0f} Y=%{y:.0f}<br>事件密度=%{z:.0f}<extra></extra>",
-    ))
-    fig.update_layout(**DK, height=500, title="空间活跃热力图 — 事件密度分布",
-                      xaxis_title="X (px)", yaxis_title="Y (px)",
-                      yaxis=dict(scaleanchor="x"))
-    return fig
-
-
-# ---------- 事件率趋势 ----------
-def fig_rate(hours, rate, anom) -> go.Figure:
-    colors = np.where(anom == "normal", C_OK,
-                      np.where(anom == "long_still", C_ALERT, C_WARN))
+def fig_rate_hourly(hourly_ev: np.ndarray, hourly_anom: np.ndarray) -> go.Figure:
+    colors = np.where(hourly_anom == "normal", C_OK,
+                      np.where(hourly_anom == "long_still", C_ALERT, C_WARN))
+    hours = np.arange(24)
     fig = go.Figure(go.Bar(
-        x=hours, y=rate, marker_color=colors,
-        hovertemplate="时间 %{x:.1f}h<br>事件率 %{y:.0f}<extra></extra>",
+        x=hours, y=hourly_ev, marker_color=colors,
+        hovertemplate="%{x}:00<br>事件数 %{y:,.0f} / 小时<extra></extra>",
     ))
-    fig.update_layout(**DK, height=380, bargap=.12,
-                      title="24 h 事件率趋势（10 min 桶）",
-                      xaxis=dict(title="时间 (h)", dtick=2),
-                      yaxis_title="事件数 / 桶")
+    fig.update_layout(
+        **DK, height=280, bargap=.15,
+        title=dict(text="24 小时事件率趋势", font=dict(size=14)),
+        xaxis=dict(title="时间", dtick=2, ticksuffix=":00"),
+        yaxis=dict(title="事件数 / 小时"),
+        margin=dict(t=40, b=40, l=50, r=20),
+    )
     return fig
 
 
-# ---------- 活跃度仪表盘 ----------
 def fig_gauge(score: int) -> go.Figure:
     c = C_OK if score >= 70 else (C_WARN if score >= 40 else C_ALERT)
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=score,
-        title=dict(text="活跃度评分", font=dict(color="#c8d6e5", size=16)),
-        number=dict(font=dict(color=c, size=48)),
+        title=dict(text="活跃度评分", font=dict(color="#c8d6e5", size=13)),
+        number=dict(font=dict(color=c, size=40)),
         gauge=dict(
             axis=dict(range=[0, 100], tickcolor="#445566"),
             bar=dict(color=c, thickness=.75),
@@ -380,11 +216,10 @@ def fig_gauge(score: int) -> go.Figure:
             ],
         ),
     ))
-    fig.update_layout(**DK, height=260, margin=dict(t=50, b=10, l=30, r=30))
+    fig.update_layout(**DK, height=220, margin=dict(t=36, b=0, l=24, r=24))
     return fig
 
 
-# ---------- 月历热力 ----------
 def fig_month_cal(rows: list[dict], year: int, month: int) -> go.Figure:
     by_d = {r["date"]: r for r in rows}
     cal = calendar.Calendar(firstweekday=0)
@@ -410,12 +245,14 @@ def fig_month_cal(rows: list[dict], year: int, month: int) -> go.Figure:
         colorscale=[[0, C_ALERT], [.4, C_WARN], [.7, C_OK], [1, C_ON]],
         zmin=0, zmax=1, text=txt, hoverinfo="text", showscale=False,
     ))
-    fig.update_layout(**DK, height=300, yaxis_autorange="reversed",
-                      title=f"{year} 年 {month} 月 — 日活跃度评分（绿=优 / 红=关注）")
+    fig.update_layout(
+        **DK, height=240, yaxis_autorange="reversed",
+        title=dict(text=f"{year}年{month}月 日活跃度评分", font=dict(size=13)),
+        margin=dict(t=36, b=10, l=50, r=10),
+    )
     return fig
 
 
-# ---------- 月度趋势 ----------
 def fig_month_trend(rows: list[dict]) -> go.Figure:
     ds = [r["date"] for r in rows]
     sc = [r["score"] for r in rows]
@@ -427,10 +264,15 @@ def fig_month_trend(rows: list[dict]) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=ds, y=sc, mode="lines+markers",
         line=dict(color=C_ON, width=2),
-        marker=dict(size=7, color=mc, line=dict(color="white", width=.5)),
+        marker=dict(size=6, color=mc, line=dict(color="white", width=.5)),
     ))
-    fig.update_layout(**DK, height=320, title="月度活跃度评分趋势",
-                      xaxis_title="日期", yaxis=dict(title="评分", range=[0, 105]))
+    fig.update_layout(
+        **DK, height=240,
+        title=dict(text="月度评分趋势", font=dict(size=13)),
+        xaxis_title="日期",
+        yaxis=dict(title="评分", range=[0, 105]),
+        margin=dict(t=36, b=40, l=50, r=10),
+    )
     return fig
 
 
@@ -441,93 +283,46 @@ def fig_month_trend(rows: list[dict]) -> go.Figure:
 def page_dashboard():
     _hero("🏠 总览仪表盘", "事件相机实时状态一览")
     today = date.today()
-    hrs, rate, anom, _ = hourly_rates(today)
+    hrs, rate, anom, _, hourly_ev, hourly_anom = hourly_rates(today)
     score = _score(rate, anom)
-    n_anom = int(np.sum(anom != "normal"))
+    n_anom_hours = int(np.sum(hourly_anom != "normal"))
+    total_events = int(np.sum(hourly_ev))
+    peak_hour = int(np.argmax(hourly_ev))
+    avg_hourly = int(np.mean(hourly_ev))
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("今日事件总量", f"{int(np.sum(rate) * 10):,}")
+    c1.metric("今日事件总量", f"{total_events:,}")
     c2.metric("活跃度评分", f"{score} / 100")
-    c3.metric("异常时段", n_anom)
-    c4.metric("传感器分辨率", f"{SENSOR_W}×{SENSOR_H}")
+    c3.metric("异常小时数", f"{n_anom_hours} / 24")
+    c4.metric("平均事件数/时", f"{avg_hourly:,}")
 
-    left, right = st.columns([2, 1])
+    left, right = st.columns([2.2, 1])
     with left:
-        st.plotly_chart(fig_rate(hrs, rate, anom), use_container_width=True)
+        st.plotly_chart(fig_rate_hourly(hourly_ev, hourly_anom),
+                        use_container_width=True)
     with right:
         st.plotly_chart(fig_gauge(score), use_container_width=True)
 
-    st.markdown("**图例** · <span style='color:#4ecdc4'>■</span> 正常 · "
-                "<span style='color:#ff6b6b'>■</span> 长时间不动 · "
-                "<span style='color:#ffe66d'>■</span> 突然剧烈运动",
-                unsafe_allow_html=True)
+    st.markdown(
+        "<span style='font-size:.85em'>"
+        "**图例** · <span style='color:#4ecdc4'>■</span> 正常 · "
+        "<span style='color:#ff6b6b'>■</span> 长时间不动 · "
+        "<span style='color:#ffe66d'>■</span> 突然剧烈运动 · "
+        f"峰值时段 **{peak_hour}:00** ({int(hourly_ev[peak_hour]):,} 事件)"
+        "</span>",
+        unsafe_allow_html=True,
+    )
 
-    if n_anom:
-        st.subheader("今日异常事件")
-        idxs = np.where(anom != "normal")[0]
-        for i in idxs:
-            h = float(hrs[i])
-            lbl = f"{int(h):02d}:{int((h % 1) * 60):02d}"
-            a = str(anom[i])
-            if a == "long_still":
-                st.warning(f"⏱ {lbl} — 长时间低活动（事件率 {rate[i]:.0f}）")
-            else:
-                st.error(f"⚡ {lbl} — 突然剧烈运动（事件率 {rate[i]:.0f}）")
-
-
-
-def page_tracking():
-    _hero("🐟 运动轨迹重建",
-          "基于 EVS 事件聚类，重现 10 秒内鱼缸中每条鱼的游动位置")
-    n_fish = st.slider("鱼的数量", 2, 6, 4)
-    paths = fish_paths(n_fish=n_fish)
-    st.plotly_chart(fig_trajectory_anim(paths, n_frames=30), use_container_width=True)
-    st.caption("点击 ▶ 播放观看 10 秒内鱼体游动轨迹动画；圆点 = 鱼当前位置，线条 = 历史路径。")
-
-
-def page_heatmap():
-    _hero("🔥 空间活跃热力图",
-          "叠加所有事件的空间密度 — 识别常驻区域、喂食热区与冷僻角落")
-    ex, ey, _, _ = sim_events()
-    st.plotly_chart(fig_heatmap(ex, ey), use_container_width=True)
-    m1, m2 = st.columns(2)
-    hot = int(np.sum(ex > SENSOR_W / 2))
-    cold = len(ex) - hot
-    m1.metric("热区事件占比", f"{hot / len(ex):.0%}")
-    m2.metric("冷区事件占比", f"{cold / len(ex):.0%}")
-
-
-def page_activity():
-    _hero("📊 活跃度分析",
-          "按日查看事件率趋势、异常标注与活跃度评分")
-    pick = st.date_input("选择日期", value=date.today())
-    hrs, rate, anom, labels = hourly_rates(pick)
-    score = _score(rate, anom)
-
-    g1, g2 = st.columns([2.5, 1])
-    with g1:
-        st.plotly_chart(fig_rate(hrs, rate, anom), use_container_width=True)
-    with g2:
-        st.plotly_chart(fig_gauge(score), use_container_width=True)
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("日事件总量", f"{int(np.sum(rate) * 10):,}")
-    c2.metric("异常桶数", int(np.sum(anom != "normal")))
-    c3.metric("活跃高峰",
-              labels[int(np.argmax(rate))] if len(rate) else "–")
-
-    # 时段详情
-    st.subheader("时段详情")
-    sel = st.selectbox("选择时间段", labels)
-    idx = labels.index(sel)
-    a = str(anom[idx])
-    st.write(f"- **事件率：** {rate[idx]:.0f}")
-    if a == "long_still":
-        st.warning("该时段事件率极低 — 鱼可能长时间静止或躲藏。")
-    elif a == "sudden_burst":
-        st.error("事件率骤增 — 可能发生打斗、惊吓或突变光照。")
-    else:
-        st.success("正常活跃范围。")
+    if n_anom_hours:
+        with st.expander(f"今日异常事件 ({n_anom_hours} 个时段)", expanded=False):
+            for h in range(24):
+                a = str(hourly_anom[h])
+                if a == "long_still":
+                    st.warning(f"⏱ {h:02d}:00 — 长时间低活动"
+                               f"（{int(hourly_ev[h]):,} 事件/小时）")
+                elif a == "sudden_burst":
+                    st.error(f"⚡ {h:02d}:00 — 突然剧烈运动"
+                             f"（{int(hourly_ev[h]):,} 事件/小时）")
 
 
 def page_monthly():
@@ -546,55 +341,46 @@ def page_monthly():
     best_day = max(rows, key=lambda r: r["score"])
     worst_day = min(rows, key=lambda r: r["score"])
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("总天数", f"{total} 天",
-              help=f"正常 {ok_days} · 关注 {warn_days} · 警告 {alert_days}")
-    m2.metric("正常天数", f"{ok_days} / {total}",
-              delta=f"{ok_days / total:.0%}" if total else "–")
-    m3.metric("月均评分", avg_score,
-              delta=f"{'优' if avg_score >= 75 else '良' if avg_score >= 60 else '差'}")
-    m4.metric("月事件总量", f"{sum(r['total_events'] for r in rows):,}")
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.metric("正常", f"{ok_days}天")
+    m2.metric("关注", f"{warn_days}天")
+    m3.metric("警告", f"{alert_days}天")
+    m4.metric("月均评分", avg_score)
+    m5.metric("最佳", f"{best_day['date'].day}日 {best_day['score']}分")
+    m6.metric("最差", f"{worst_day['date'].day}日 {worst_day['score']}分")
 
-    s1, s2, s3, s4 = st.columns(4)
-    s1.metric("关注天数", f"{warn_days} 天",
-              delta=f"{warn_days / total:.0%}" if total else "–",
-              delta_color="inverse")
-    s2.metric("警告天数", f"{alert_days} 天",
-              delta=f"{alert_days / total:.0%}" if total else "–",
-              delta_color="inverse")
-    s3.metric("最佳日", f"{best_day['date'].day}日 ({best_day['score']}分)")
-    s4.metric("最差日", f"{worst_day['date'].day}日 ({worst_day['score']}分)")
-
-    t1, t2 = st.tabs(["月历热力", "趋势曲线"])
-    with t1:
+    left, right = st.columns(2)
+    with left:
         st.plotly_chart(fig_month_cal(rows, yr, mo), use_container_width=True)
-    with t2:
+    with right:
         st.plotly_chart(fig_month_trend(rows), use_container_width=True)
 
     st.markdown(
-        "**判定规则** · 异常桶占比 < 12% → "
+        "<span style='font-size:.82em'>"
+        "**判定** · 异常占比 < 12% → "
         "<span style='color:#4ecdc4'>✅ 正常</span> · "
         "12%~25% → <span style='color:#ffe66d'>⚠️ 关注</span> · "
-        "评分 < 40 → <span style='color:#ff6b6b'>🚨 警告</span>",
+        "评分 < 40 → <span style='color:#ff6b6b'>🚨 警告</span>"
+        "</span>",
         unsafe_allow_html=True,
     )
-    st.subheader("每日明细")
 
     def _day_tag(r: dict) -> str:
         if r["score"] < 40:
             return "🚨 警告"
         return "✅ 正常" if r["ok"] else "⚠️ 关注"
 
-    _render_table(
-        ["日期", "星期", "评分", "异常桶占比", "判定", "事件总量"],
-        [
-            [str(r["date"]),
-             ["一", "二", "三", "四", "五", "六", "日"][r["date"].weekday()],
-             str(r["score"]), f"{r['ar']:.1%}",
-             _day_tag(r), f"{r['total_events']:,}"]
-            for r in rows
-        ],
-    )
+    with st.expander("每日明细", expanded=False):
+        _render_table(
+            ["日期", "星期", "评分", "异常占比", "判定", "事件总量"],
+            [
+                [str(r["date"]),
+                 ["一", "二", "三", "四", "五", "六", "日"][r["date"].weekday()],
+                 str(r["score"]), f"{r['ar']:.1%}",
+                 _day_tag(r), f"{r['total_events']:,}"]
+                for r in rows
+            ],
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -606,9 +392,6 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 PAGES = {
     "🏠 总览仪表盘": page_dashboard,
-    "🐟 运动轨迹重建": page_tracking,
-    "🔥 空间热力分析": page_heatmap,
-    "📊 活跃度分析": page_activity,
     "📅 月度报告": page_monthly,
 }
 
