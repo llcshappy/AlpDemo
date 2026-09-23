@@ -362,9 +362,9 @@ def page_monthly():
 
     st.markdown(
         "<span style='font-size:.82em'>"
-        "**判定** · 异常占比 < 12% → "
+        "**判定** · 评分 ≥ 70 → "
         "<span style='color:#4ecdc4'>✅ 正常</span> · "
-        "12%~25% → <span style='color:#ffe66d'>⚠️ 关注</span> · "
+        "40 ≤ 评分 < 70 → <span style='color:#ffe66d'>⚠️ 关注</span> · "
         "评分 < 40 → <span style='color:#ff6b6b'>🚨 警告</span>"
         "</span>",
         unsafe_allow_html=True,
